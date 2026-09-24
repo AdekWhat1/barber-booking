@@ -25,13 +25,14 @@ class BookingCreateSerializer(serializers.ModelSerializer):
         model = Booking
         fields = [
             "id",
+            "cancel_token",
             "service",
             "client_name",
             "client_phone",
             "date",
             "start_time",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "cancel_token"]
 
     def _get_lang(self) -> str:
         request = self.context.get("request")
