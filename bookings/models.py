@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta
 from django.db import models
 
@@ -55,6 +56,9 @@ class Booking(models.Model):
         CONFIRMED = "confirmed", "Підтверджено"
         CANCELLED = "cancelled", "Скасовано"
 
+    cancel_token = models.UUIDField(
+        default=uuid.uuid4, editable=False, unique=True, verbose_name="Токен скасування"
+    )
     service = models.ForeignKey(
         Service,
         on_delete=models.PROTECT,
