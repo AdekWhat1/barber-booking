@@ -31,8 +31,9 @@ class BookingCreateSerializer(serializers.ModelSerializer):
             "client_phone",
             "date",
             "start_time",
+            "end_time",
         ]
-        read_only_fields = ["id", "cancel_token"]
+        read_only_fields = ["id", "cancel_token", "end_time"]
 
     def _get_lang(self) -> str:
         request = self.context.get("request")
@@ -58,49 +59,74 @@ class BookingCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         lang = self._get_lang()
-        service = attrs.get("service")
-        date = attrs.get("date")
+        booking_date = attrs.get("date")
         start_time = attrs.get("start_time")
+        service = attrs.get("service")
 
         try:
-            working_day = WorkingDay.objects.get(date=date)
+            working_day = WorkingDay.objects.get(date=booking_date)
+            if working_day.is_day_off:
+                raise serializers.ValidationError(
+                    get_msg("day_off", lang) or "Цей день є вихідним у майстра."
+                )
         except WorkingDay.DoesNotExist:
-            raise serializers.ValidationError({"date": get_msg("no_schedule", lang)})
-
-        if working_day.is_day_off:
-            raise serializers.ValidationError({"date": get_msg("day_off", lang)})
-
-        dummy_date = datetime.today().date()
-        start_dt = datetime.combine(dummy_date, start_time)
-        end_dt = start_dt + timedelta(minutes=service.duration_minutes)
-        calculated_end_time = end_dt.time()
-
-        if (
-            start_time < working_day.start_time
-            or calculated_end_time > working_day.end_time
-        ):
             raise serializers.ValidationError(
-                {
-                    "start_time": get_msg(
-                        "outside_working_hours",
-                        lang,
-                        start=working_day.start_time.strftime("%H:%M"),
-                        end=working_day.end_time.strftime("%H:%M"),
-                    )
-                }
+                get_msg("schedule_not_found", lang)
+                or "Графік на цю дату ще не сформовано."
             )
 
-        overlapping_bookings = Booking.objects.filter(
-            date=date,
-            status=Booking.Status.CONFIRMED,
-            start_time__lt=calculated_end_time,
-            end_time__gt=start_time,
+        tz = timezone.get_current_timezone()
+        candidate_start = timezone.make_aware(
+            datetime.combine(booking_date, start_time), tz
+        )
+        candidate_service_end = candidate_start + timedelta(
+            minutes=service.duration_minutes
+        )
+        candidate_busy_end = candidate_start + timedelta(
+            minutes=service.duration_minutes + service.buffer_minutes
         )
 
-        if overlapping_bookings.exists():
+        if (
+            booking_date == timezone.localdate()
+            and candidate_start <= timezone.localtime()
+        ):
             raise serializers.ValidationError(
-                {"start_time": get_msg("slot_occupied", lang)}
+                get_msg("past_time", lang)
+                or "Неможливо записатися на час, що вже минув."
             )
 
-        attrs["end_time"] = calculated_end_time
+        end_work_dt = timezone.make_aware(
+            datetime.combine(booking_date, working_day.end_time), tz
+        )
+        start_work_dt = timezone.make_aware(
+            datetime.combine(booking_date, working_day.start_time), tz
+        )
+
+        if candidate_start < start_work_dt or candidate_service_end > end_work_dt:
+            raise serializers.ValidationError(
+                get_msg("outside_working_hours", lang)
+                or "Обраний час виходить за межі робочого дня."
+            )
+
+        existing_bookings = Booking.objects.filter(
+            date=booking_date,
+            status=Booking.Status.CONFIRMED,
+        ).select_related("service")
+
+        for b in existing_bookings:
+            b_start = timezone.make_aware(
+                datetime.combine(booking_date, b.start_time), tz
+            )
+            b_buffer = b.service.buffer_minutes if b.service else 10
+            b_busy_end = timezone.make_aware(
+                datetime.combine(booking_date, b.end_time), tz
+            ) + timedelta(minutes=b_buffer)
+
+            if candidate_start < b_busy_end and b_start < candidate_busy_end:
+                raise serializers.ValidationError(
+                    get_msg("slot_occupied", lang)
+                    or "Цей часовий слот (або перерва майстра) вже зайнятий іншим записом."
+                )
+
+        attrs["end_time"] = candidate_service_end.time()
         return attrs

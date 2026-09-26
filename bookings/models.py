@@ -6,10 +6,8 @@ from django.db import models
 class Service(models.Model):
     name_cs = models.CharField(max_length=150, verbose_name="Назва (CS)")
     description_cs = models.TextField(blank=True, verbose_name="Опис (CS)")
-
     name_uk = models.CharField(max_length=150, blank=True, verbose_name="Назва (UK)")
     description_uk = models.TextField(blank=True, verbose_name="Опис (UK)")
-
     price = models.DecimalField(
         max_digits=8, decimal_places=0, verbose_name="Ціна (Kč)"
     )
@@ -17,6 +15,11 @@ class Service(models.Model):
         default=45,
         verbose_name="Тривалість (у хвилинах)",
         help_text="Скільки хвилин триває процедура (наприклад, 30, 45, 60)",
+    )
+    buffer_minutes = models.PositiveIntegerField(
+        default=10,
+        verbose_name="Технічна перерва після (хв)",
+        help_text="Час на дезінфекцію, прибирання та відпочинок",
     )
     is_active = models.BooleanField(default=True, verbose_name="Активна послуга")
 
@@ -26,7 +29,7 @@ class Service(models.Model):
         ordering = ["price"]
 
     def __str__(self):
-        return f"{self.name_cs} ({self.duration_minutes} хв) — {self.price} Kč"
+        return f"{self.name_cs} ({self.price} Kč, {self.duration_minutes} хв + {self.buffer_minutes} хв буфер)"
 
     def get_name(self, lang="cs"):
         if lang == "uk" and self.name_uk:
