@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Online rezervace | Barber Studio</title>
+	<!-- Tailwind CSS CDN -->
+	<script src="https://cdn.tailwindcss.com"></script>
+	<!-- Alpine.js CDN -->
+	<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+	<style>
+      [x-cloak] {
+          display: none !important;
+      }
+	</style>
+</head>
+<body
+		class="bg-[#121212] text-zinc-100 min-h-screen flex flex-col items-center justify-center p-4 antialiased selection:bg-amber-500 selection:text-black">
+
+<main
+		x-data="bookingApp()"
+		x-cloak
+		class="w-full max-w-lg bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl my-auto"
+>
+	<!-- Шапка з локацією та перемикачем мов -->
+	<header class="flex justify-between items-start pb-6 border-b border-zinc-800">
+		<div>
+			<h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+				<span>✂️</span> Barber Studio
+			</h1>
+			<p class="text-xs text-zinc-400 mt-0.5" x-text="t('subtitle')"></p>
+
+			<!-- Бейдж локації -->
+			<a
+					href="https://maps.google.com/?q=Rokycanská+1385/130,+312+16+Plzeň"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 rounded-lg text-xs text-zinc-300 hover:text-amber-400 transition"
+			>
+				<span>📍</span>
+				<span x-text="t('location_badge')"></span>
+				<span class="text-zinc-600 text-[10px]">↗</span>
+			</a>
+		</div>
+
+		<!-- Мовний перемикач -->
+		<div class="inline-flex bg-zinc-800/80 p-1 rounded-xl text-xs font-semibold">
+			<button
+					@click="setLang('uk')"
+					:class="lang === 'uk' ? 'bg-amber-500 text-black shadow' : 'text-zinc-400 hover:text-white'"
+					class="px-2.5 py-1 rounded-lg transition"
+			>UA
+			</button>
+			<button
+					@click="setLang('cs')"
+					:class="lang === 'cs' ? 'bg-amber-500 text-black shadow' : 'text-zinc-400 hover:text-white'"
+					class="px-2.5 py-1 rounded-lg transition"
+			>CS
+			</button>
+		</div>
+	</header>
+
+	<!-- Індикатор кроків -->
+	<div x-show="step < 4" class="grid grid-cols-3 gap-2 my-6">
+		<div :class="step >= 1 ? 'bg-amber-500' : 'bg-zinc-800'"
+		     class="h-1.5 rounded-full transition-all duration-300"></div>
+		<div :class="step >= 2 ? 'bg-amber-500' : 'bg-zinc-800'"
+		     class="h-1.5 rounded-full transition-all duration-300"></div>
+		<div :class="step >= 3 ? 'bg-amber-500' : 'bg-zinc-800'"
+		     class="h-1.5 rounded-full transition-all duration-300"></div>
+	</div>
+
+	<!-- КРОК 1: Вибір послуги -->
+	<section x-show="step === 1" x-transition>
+		<h2 class="text-base font-semibold mb-4 text-zinc-200" x-text="t('step1_title')"></h2>
+
+		<div class="space-y-3">
+			{% for service in services %}
+				<div
+						@click="selectService({{ service.id }}, {{ service.price }}, {{ service.duration_minutes }}, '{{ service.name_uk }}', '{{ service.name_cs }}')"
+						:class="selectedService?.id === {{ service.id }} ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/50'"
+						class="p-4 rounded-2xl border cursor-pointer transition flex justify-between items-center group"
+				>
+					<div>
+						<div class="font-medium text-white group-hover:text-amber-400 transition">
+							<span x-show="lang === 'uk'">{{ service.name_uk }}</span>
+							<span x-show="lang === 'cs'">{{ service.name_cs }}</span>
+						</div>
+						<div class="text-xs text-zinc-400 mt-1 flex items-center gap-1.5 font-normal">
+							<span>⏱ {{ service.duration_minutes }} <span x-text="t('min')"></span></span>
+						</div>
+					</div>
+					<div class="text-right font-bold text-amber-400">
+						{{ service.price|floatformat:0 }} Kč
+					</div>
+				</div>
+			{% endfor %}
+		</div>
+
+		<button
+				:disabled="!selectedService"
+				@click="goToStep(2)"
+				class="w-full mt-6 py-3.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed text-black font-semibold rounded-2xl transition shadow-lg shadow-amber-500/10"
+				x-text="t('continue')"
+		></button>
+	</section>
+
+	<!-- КРОК 2: Вибір дати та часу -->
+	<section x-show="step === 2" x-transition>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-base font-semibold text-zinc-200" x-text="t('step2_title')"></h2>
+			<button @click="goToStep(1)" class="text-xs text-zinc-400 hover:text-white" x-text="t('back')"></button>
+		</div>
+
+		<!-- Обрана послуга -->
+		<div class="mb-4 inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl">
+			<span class="text-xs text-zinc-500" x-text="t('service_label')"></span>
+			<span class="text-xs font-semibold text-amber-400"
+			      x-text="lang === 'uk' ? selectedService?.name_uk : selectedService?.name_cs"></span>
+			<span class="text-[11px] text-zinc-400" x-text="`(${selectedService?.duration_minutes} ${t('min')})`"></span>
+		</div>
+
+		<!-- Горизонтальний вибір дати -->
+		<div class="flex gap-2 overflow-x-auto pb-3 scrollbar-none">
+			<template x-for="d in availableDates" :key="d.dateStr">
+				<button
+						type="button"
+						@click="selectDate(d.dateStr)"
+						:class="selectedDate === d.dateStr ? 'bg-amber-500 text-black font-bold shadow-sm' : 'bg-zinc-900 border border-zinc-800 text-zinc-300 hover:border-zinc-700'"
+						class="flex-shrink-0 w-16 py-3 rounded-2xl text-center transition flex flex-col items-center"
+				>
+					<span class="text-[11px] uppercase tracking-wider opacity-70" x-text="d.dayName"></span>
+					<span class="text-base font-bold" x-text="d.dayNum"></span>
+				</button>
+			</template>
+		</div>
+
+		<!-- Сітка вільних віконець -->
+		<div class="mt-4">
+			<div class="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2.5"
+			     x-text="t('available_time')"></div>
+
+			<div x-show="loadingSlots" class="text-center py-8 text-zinc-500 text-sm">
+				<span class="animate-pulse" x-text="t('loading')"></span>
+			</div>
+
+			<div x-show="!loadingSlots && slots.length === 0" class="text-center py-8 text-zinc-500 text-sm">
+				<p x-text="t('no_slots')"></p>
+			</div>
+
+			<div x-show="!loadingSlots && slots.length > 0" class="grid grid-cols-4 gap-2">
+				<template x-for="timeSlot in slots" :key="timeSlot">
+					<button
+							type="button"
+							@click="selectedTime = timeSlot"
+							:class="selectedTime === timeSlot ? 'bg-amber-500 text-black font-semibold' : 'bg-zinc-900 border border-zinc-800 text-zinc-200 hover:border-zinc-700'"
+							class="py-2.5 rounded-xl text-center text-sm transition font-medium"
+							x-text="timeSlot"
+					></button>
+				</template>
+			</div>
+		</div>
+
+		<!-- Кнопка продовжити -->
+		<button
+				type="button"
+				:disabled="!selectedTime"
+				@click="goToStep(3)"
+				class="w-full mt-6 py-3.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed text-black font-semibold rounded-2xl transition shadow-lg shadow-amber-500/10"
+				x-text="t('continue')"
+		></button>
+	</section>
+
+	<!-- КРОК 3: Контактні дані -->
+	<section x-show="step === 3" x-transition>
+		<div class="flex items-center justify-between mb-4">
+			<h2 class="text-base font-semibold text-zinc-200" x-text="t('step3_title')"></h2>
+			<button @click="goToStep(2)" class="text-xs text-zinc-400 hover:text-white" x-text="t('back')"></button>
+		</div>
+
+		<!-- Картка обраного запису -->
+		<div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-2xl mb-5 space-y-1.5 text-sm">
+			<div class="flex justify-between">
+				<span class="text-zinc-400" x-text="t('service_label')"></span>
+				<span class="font-medium text-white"
+				      x-text="lang === 'uk' ? selectedService?.name_uk : selectedService?.name_cs"></span>
+			</div>
+			<div class="flex justify-between">
+				<span class="text-zinc-400" x-text="t('date_time_label')"></span>
+				<span class="font-medium text-amber-400"
+				      x-text="`${selectedDate} ${lang === 'uk' ? 'о' : 'v'} ${selectedTime}`"></span>
+			</div>
+			<div class="flex justify-between">
+				<span class="text-zinc-400" x-text="t('price_label')"></span>
+				<span class="font-bold text-white" x-text="`${selectedService?.price} Kč`"></span>
+			</div>
+		</div>
+
+		<!-- Форма введення -->
+		<form @submit.prevent="submitBooking" class="space-y-4">
+			<div class="mb-4 text-left">
+				<label class="block text-xs font-medium text-zinc-400 mb-1.5" x-text="t('name_label')"></label>
+				<input
+						type="text"
+						x-model="clientName"
+						@input="nameError = false"
+						:class="nameError ? 'border-rose-500 focus:border-rose-500 ring-1 ring-rose-500/30' : 'border-zinc-800 focus:border-amber-400'"
+						class="w-full bg-[#161616] border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition"
+						:placeholder="lang === 'uk' ? 'Ваше ім\'я' : 'Vaše jméno'"
+				>
+				<span x-show="nameError" x-transition class="text-[11px] text-rose-400 mt-1.5 block font-medium"
+				      x-text="t('name_required')"></span>
+			</div>
+
+			<!-- Поле телефону -->
+			<div class="mb-6 text-left">
+				<label class="block text-xs font-medium text-zinc-400 mb-1.5" x-text="t('phone_label')"></label>
+				<input
+						type="tel"
+						x-model="clientPhone"
+						@input="phoneError = false"
+						:class="phoneError ? 'border-rose-500 focus:border-rose-500 ring-1 ring-rose-500/30' : 'border-zinc-800 focus:border-amber-400'"
+						class="w-full bg-[#161616] border rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition"
+						placeholder="+420 777 000 000"
+				>
+				<span x-show="phoneError" x-transition class="text-[11px] text-rose-400 mt-1.5 block font-medium"
+				      x-text="t('phone_required')"></span>
+			</div>
+
+			<button
+					type="submit"
+					:disabled="isSubmitting"
+					class="w-full mt-4 py-3.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-semibold rounded-2xl transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10"
+			>
+				<span x-show="!isSubmitting" x-text="t('confirm_booking')"></span>
+				<span x-show="isSubmitting" class="animate-pulse" x-text="t('processing')"></span>
+			</button>
+		</form>
+	</section>
+
+	<!-- КРОК 4: Екран успіху -->
+	<section x-show="step === 4" x-transition class="text-center py-6">
+		<div
+				class="w-16 h-16 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-bold">
+			✓
+		</div>
+		<h2 class="text-xl font-bold text-white mb-1.5" x-text="t('success_title')"></h2>
+		<p class="text-xs text-zinc-400 mb-6" x-text="t('success_subtitle')"></p>
+
+		<div class="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 text-left text-sm space-y-2 mb-4">
+			<div class="flex justify-between">
+				<span class="text-zinc-500" x-text="t('client')"></span>
+				<span class="font-medium text-white" x-text="clientName"></span>
+			</div>
+			<div class="flex justify-between">
+				<span class="text-zinc-500" x-text="t('date_time')"></span>
+				<span class="font-bold text-amber-400" x-text="`${selectedDate} | ${selectedTime}`"></span>
+			</div>
+		</div>
+
+		<div class="p-3 bg-zinc-900/40 border border-zinc-800/80 rounded-xl text-xs text-zinc-400 text-center mb-5">
+			📍 <b x-text="lang === 'uk' ? 'Адреса:' : 'Adresa:'"></b> <span x-text="t('address_val')"></span>
+		</div>
+
+		<!-- Блок керування записом для клієнта -->
+		<div class="pt-4 border-t border-zinc-800 space-y-3">
+			<button
+					@click="copyCancelLink()"
+					class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-xl transition flex items-center justify-center gap-2"
+			>
+				<span>🔗</span>
+				<span x-text="copiedLink ? t('link_copied') : t('copy_cancel_link')"></span>
+			</button>
+
+			<button
+					@click="cancelBookingDirectly()"
+					:disabled="isCancelling"
+					class="text-xs text-rose-400 hover:text-rose-300 transition underline underline-offset-4"
+					x-text="isCancelling ? t('cancelling') : t('cancel_booking_btn')"
+			></button>
+		</div>
+	</section>
+</main>
+
+<script>
+    function bookingApp() {
+        return {
+            lang: 'cs',
+            step: 1,
+            selectedService: null,
+            selectedDate: '',
+            selectedTime: '',
+            availableDates: [],
+            slots: [],
+            loadingSlots: false,
+            clientName: '',
+            clientPhone: '',
+            isSubmitting: false,
+            errorMessage: '',
+
+            // Помилки валідації форми
+            nameError: false,
+            phoneError: false,
+
+            // Стан для скасування запису
+            cancelToken: '',
+            copiedLink: false,
+            isCancelling: false,
+
+            dict: {
+                uk: {
+                    subtitle: "Швидкий онлайн-запис до вашого майстра",
+                    location_badge: "Rokycanská 1385/130, Plzeň (ТЦ)",
+                    address_val: "Rokycanská 1385/130, Plzeň 4 (у торговому центрі)",
+                    step1_title: "1. Оберіть потрібну послугу",
+                    step2_title: "2. Дата та час візиту",
+                    step3_title: "3. Ваші контакти",
+                    continue: "Продовжити",
+                    back: "← Назад",
+                    min: "хв",
+                    available_time: "Доступні віконця:",
+                    no_slots: "На цей день немає вільних слотів.",
+                    loading: "Шукаємо вільні віконця...",
+                    service_label: "Послуга:",
+                    date_time_label: "Час:",
+                    price_label: "Ціна:",
+                    name_label: "Ім'я",
+                    phone_label: "Номер телефону",
+                    name_required: "Будь ласка, вкажіть ваше ім'я",
+                    phone_required: "Вкажіть номер телефону для зв'язку",
+                    confirm_booking: "Підтвердити запис",
+                    processing: "Бронюємо...",
+                    success_title: "Запис підтверджено!",
+                    success_subtitle: "Майстриня отримала сповіщення в Telegram. До зустрічі!",
+                    client: "Клієнт:",
+                    date_time: "Дата та час:",
+                    new_booking: "Зробити ще один запис",
+                    cancel_hint: "Якщо плани зміняться, збережіть посилання для скасування:",
+                    copy_cancel_link: "Скопіювати посилання для скасування",
+                    link_copied: "Посилання скопійовано!",
+                    cancel_booking_btn: "Скасувати цей запис",
+                    cancelling: "Скасовуємо...",
+                    confirm_cancel_msg: "Ви впевнені, що хочете скасувати цей запис?",
+                    cancel_success_msg: "Запис успішно скасовано.",
+                    cancel_error_msg: "Помилка при скасуванні."
+                },
+                cs: {
+                    subtitle: "Rychlá online rezervace k vašemu barberovi",
+                    location_badge: "Rokycanská 1385/130, Plzeň (OC)",
+                    address_val: "Rokycanská 1385/130, Plzeň 4 (v obchodním centru)",
+                    step1_title: "1. Vyberte požadovanou službu",
+                    step2_title: "2. Datum a čas návštěvy",
+                    step3_title: "3. Kontaktní údaje",
+                    continue: "Pokračovat",
+                    back: "← Zpět",
+                    min: "min",
+                    available_time: "Volné termíny:",
+                    no_slots: "Pro tento den nejsou volné termíny.",
+                    loading: "Vyhledávám volné termíny...",
+                    service_label: "Služba:",
+                    date_time_label: "Čas:",
+                    price_label: "Cena:",
+                    name_label: "Jméno",
+                    phone_label: "Telefonní číslo",
+                    name_required: "Prosím, zadejte své jméno",
+                    phone_required: "Zadejte své telefonní číslo",
+                    confirm_booking: "Potvrdit rezervaci",
+                    processing: "Rezervuji...",
+                    success_title: "Rezervace potvrzena!",
+                    success_subtitle: "Kadeřnice obdržela oznámení na Telegram. Budeme se těšit!",
+                    client: "Klient:",
+                    date_time: "Datum a čas:",
+                    new_booking: "Vytvořit další rezervaci",
+                    cancel_hint: "Pokud se vaše plány změní, uložte si odkaz pro zrušení:",
+                    copy_cancel_link: "Zkopírovat odkaz pro zrušení",
+                    link_copied: "Odkaz byl zkopírován!",
+                    cancel_booking_btn: "Zrušit tuto rezervaci",
+                    cancelling: "Ruším...",
+                    confirm_cancel_msg: "Opravdu chcete tuto rezervaci zrušit?",
+                    cancel_success_msg: "Rezervace byla úspěšně zrušena.",
+                    cancel_error_msg: "Chyba při rušení rezervace."
+                }
+            },
+
+            init() {
+                this.generateDates();
+            },
+
+            setLang(l) {
+                this.lang = l;
+                this.generateDates();
+                if (this.selectedDate && this.selectedService) {
+                    this.fetchSlots();
+                }
+            },
+
+            t(key) {
+                return this.dict[this.lang][key] || key;
+            },
+
+            generateDates() {
+                const daysOfWeekUk = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+                const daysOfWeekCs = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
+                const list = [];
+                const now = new Date();
+
+                for (let i = 0; i < 14; i++) {
+                    const d = new Date();
+                    d.setDate(now.getDate() + i);
+                    const dateStr = d.toISOString().split('T')[0];
+                    const dayNum = d.getDate();
+                    const dayName = this.lang === 'uk' ? daysOfWeekUk[d.getDay()] : daysOfWeekCs[d.getDay()];
+                    list.push({dateStr, dayNum, dayName});
+                }
+                this.availableDates = list;
+                if (!this.selectedDate && list.length > 0) {
+                    this.selectedDate = list[0].dateStr;
+                }
+            },
+
+            selectService(id, price, duration_minutes, name_uk, name_cs) {
+                this.selectedService = {id, price, duration_minutes, name_uk, name_cs};
+            },
+
+            goToStep(s) {
+                this.step = s;
+                this.errorMessage = '';
+                this.nameError = false;
+                this.phoneError = false;
+                if (s === 2 && this.selectedDate && this.selectedService) {
+                    this.fetchSlots();
+                }
+            },
+
+            selectDate(dateStr) {
+                this.selectedDate = dateStr;
+                this.selectedTime = '';
+                this.fetchSlots();
+            },
+
+            async fetchSlots() {
+                if (!this.selectedDate || !this.selectedService) return;
+                this.loadingSlots = true;
+                this.slots = [];
+
+                try {
+                    const res = await fetch(`/api/available-slots/?date=${this.selectedDate}&service_id=${this.selectedService.id}&lang=${this.lang}`);
+                    const data = await res.json();
+                    this.slots = data.slots || [];
+                } catch (e) {
+                    this.slots = [];
+                } finally {
+                    this.loadingSlots = false;
+                }
+            },
+
+            async submitBooking() {
+                this.nameError = !this.clientName || this.clientName.trim().length < 2;
+                this.phoneError = !this.clientPhone || this.clientPhone.trim().length < 7;
+
+                if (this.nameError || this.phoneError) {
+                    return;
+                }
+
+                this.isSubmitting = true;
+                this.errorMessage = '';
+
+                try {
+                    const res = await fetch(`/api/bookings/?lang=${this.lang}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            service: this.selectedService.id,
+                            client_name: this.clientName.trim(),
+                            client_phone: this.clientPhone.trim(),
+                            date: this.selectedDate,
+                            start_time: this.selectedTime
+                        })
+                    });
+
+                    const data = await res.json();
+                    if (!res.ok) {
+                        const err = data.non_field_errors?.[0] || Object.values(data)[0];
+                        throw new Error(Array.isArray(err) ? err[0] : err);
+                    }
+
+                    this.cancelToken = data.cancel_token;
+                    this.step = 4;
+                } catch (err) {
+                    this.errorMessage = err.message || "Chyba při vytváření rezervace.";
+                } finally {
+                    this.isSubmitting = false;
+                }
+            },
+
+            copyCancelLink() {
+                const url = `${window.location.origin}/cancel/${this.cancelToken}/`;
+                navigator.clipboard.writeText(url);
+                this.copiedLink = true;
+                setTimeout(() => {
+                    this.copiedLink = false;
+                }, 3000);
+            },
+
+            async cancelBookingDirectly() {
+                if (!confirm(this.t('confirm_cancel_msg'))) return;
+                this.isCancelling = true;
+
+                try {
+                    const res = await fetch(`/api/cancel/${this.cancelToken}/`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'}
+                    });
+
+                    if (res.ok) {
+                        alert(this.t('cancel_success_msg'));
+                        window.location.reload();
+                    } else {
+                        throw new Error();
+                    }
+                } catch (e) {
+                    alert(this.t('cancel_error_msg'));
+                } finally {
+                    this.isCancelling = false;
+                }
+            }
+        };
+    }
+</script>
+</body>
+</html>
