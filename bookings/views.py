@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 
+from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
+from django.views import View
 from django.views.generic import TemplateView
 from rest_framework import generics, status
 from rest_framework.views import APIView
@@ -219,7 +221,7 @@ class BookingCancelView(APIView):
         booking_datetime = timezone.make_aware(
             datetime.combine(booking.date, booking.start_time)
         )
-        if booking_datetime - timezone.now() < timedelta(hours=2):
+        if booking_datetime - timezone.now() < timedelta(hours=24):
             return Response(
                 {"error": get_msg("cancel_too_late", lang)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -232,6 +234,57 @@ class BookingCancelView(APIView):
 
         return Response(
             {"detail": get_msg("cancel_success", lang)}, status=status.HTTP_200_OK
+        )
+
+
+class BookingCancelPageView(View):
+    """Веб-сторінка скасування: блокує скасування менше ніж за 24 години."""
+
+    def get(self, request, cancel_token):
+        booking = get_object_or_404(Booking, cancel_token=cancel_token)
+        booking_datetime = timezone.make_aware(
+            datetime.combine(booking.date, booking.start_time)
+        )
+
+        too_late = (booking_datetime - timezone.now()) < timedelta(hours=24)
+
+        return render(
+            request,
+            "cancel_booking.html",
+            {
+                "booking": booking,
+                "too_late": too_late,
+            },
+        )
+
+    def post(self, request, cancel_token):
+        booking = get_object_or_404(Booking, cancel_token=cancel_token)
+        booking_datetime = timezone.make_aware(
+            datetime.combine(booking.date, booking.start_time)
+        )
+
+        if (booking_datetime - timezone.now()) < timedelta(hours=24):
+            return render(
+                request,
+                "cancel_booking.html",
+                {
+                    "booking": booking,
+                    "too_late": True,
+                },
+            )
+
+        if booking.status != Booking.Status.CANCELLED:
+            booking.status = Booking.Status.CANCELLED
+            booking.save(update_fields=["status"])
+            try:
+                send_cancellation_notification(booking)
+            except Exception:
+                pass
+
+        return render(
+            request,
+            "cancel_booking.html",
+            {"booking": booking, "success": True},
         )
 
 

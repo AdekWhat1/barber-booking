@@ -1,0 +1,28 @@
+{% if success or booking.status == "CANCELLED" %}
+      <!-- Блок: запис успішно скасовано -->
+      <div class="text-rose-400 font-bold mb-2">Rezervace byla zrušena</div>
+      <p class="text-xs text-zinc-400 mb-6">Váš termín byl uvolněn.</p>
+
+    {% elif too_late %}
+      <!-- Блок: запізніле скасування (< 24 годин) -->
+      <div class="w-14 h-14 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
+        ⏳
+      </div>
+      <h1 class="text-lg font-bold text-white mb-2">Termín nelze zrušit online</h1>
+      <p class="text-xs text-zinc-400 mb-6 leading-relaxed">
+        Online zrušení je možné nejpozději <b>24 hodin předem</b>. Pro zrušení nebo změnu termínu prosím kontaktujte kadeřnici telefonicky:
+      </p>
+
+      <a href="tel:+420777000000" class="inline-block w-full py-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs rounded-xl transition mb-4">
+        📞 Zavolat do studia
+      </a>
+
+      <a href="/" class="text-xs text-zinc-500 hover:text-zinc-300">
+        Zpět na hlavní stránku
+      </a>
+
+    {% else %}
+      <!-- Звичайне підтвердження скасування за добу -->
+      <h1 class="text-lg font-bold text-white mb-1">Zrušit rezervaci?</h1>
+      <!-- форма скасування -->
+    {% endif %}

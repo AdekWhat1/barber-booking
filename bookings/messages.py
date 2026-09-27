@@ -36,8 +36,8 @@ MESSAGES = {
         "uk": "Цей запис уже скасовано.",
     },
     "cancel_too_late": {
-        "cs": "Rezervaci nelze zrušit online méně než 2 hodiny předem. Kontaktujte prosím kadeřnici telefonicky.",
-        "uk": "Скасувати запис онлайн менш ніж за 2 години неможливо. Будь ласка, зателефонуйте майстрині.",
+        "cs": "Rezervaci lze online zrušit nejpozději 24 hodin před začátkem. Prosím, kontaktujte kadeřnici telefonicky.",
+        "uk": "Скасувати запис онлайн можливо не пізніше ніж за 24 години до візиту. Будь ласка, зателефонуйте майстрині.",
     },
     "cancel_success": {
         "cs": "Vaše rezervace byla úspěšně zrušena.",
