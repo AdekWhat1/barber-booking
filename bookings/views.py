@@ -244,14 +244,3 @@ class BookingPageView(TemplateView):
         context = super().get_context_data(**kwargs)
         context["services"] = Service.objects.filter(is_active=True).order_by("price")
         return context
-
-
-class BookingLightPageView(TemplateView):
-    """Світла версія сторінки запису (Warm Studio)."""
-
-    template_name = "booking_light.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["services"] = Service.objects.filter(is_active=True).order_by("price")
-        return context
