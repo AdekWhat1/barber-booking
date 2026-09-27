@@ -1,28 +1,212 @@
-{% if success or booking.status == "CANCELLED" %}
-      <!-- Блок: запис успішно скасовано -->
-      <div class="text-rose-400 font-bold mb-2">Rezervace byla zrušena</div>
-      <p class="text-xs text-zinc-400 mb-6">Váš termín byl uvolněn.</p>
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Керування записом | Barber Studio Plzeň</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js для миттєвого перемикання мови -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body
+  x-data="cancelApp()"
+  class="bg-[#0c0c0e] min-h-screen flex items-center justify-center p-4 text-zinc-100 antialiased selection:bg-amber-500 selection:text-black"
+>
 
-    {% elif too_late %}
-      <!-- Блок: запізніле скасування (< 24 годин) -->
-      <div class="w-14 h-14 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
-        ⏳
+  <div class="w-full max-w-md bg-[#161618] border border-zinc-800/80 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden text-center">
+
+    <!-- Декоративне сяйво зверху -->
+    <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+    <!-- Верхня панель: перемикач мов UA / CS -->
+    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center space-x-2">
+        <span class="text-amber-500 text-xl font-bold">✂️</span>
+        <span class="font-bold text-base tracking-tight text-white">Barber Studio</span>
       </div>
-      <h1 class="text-lg font-bold text-white mb-2">Termín nelze zrušit online</h1>
+
+      <!-- Кнопки перемикання UA / CS -->
+      <div class="inline-flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 text-xs font-semibold">
+        <button
+          type="button"
+          @click="lang = 'uk'"
+          :class="lang === 'uk' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'"
+          class="px-2.5 py-1 rounded-lg transition"
+        >
+          UA
+        </button>
+        <button
+          type="button"
+          @click="lang = 'cs'"
+          :class="lang === 'cs' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'"
+          class="px-2.5 py-1 rounded-lg transition"
+        >
+          CS
+        </button>
+      </div>
+    </div>
+
+    <!-- Локація студії -->
+    <div class="mb-6 inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-[11px] text-zinc-400">
+      <span class="text-rose-500">📍</span>
+      <span x-text="t('address_val')"></span>
+    </div>
+
+    <!-- 1. СТАН: ЗАПИС УСПІШНО СКАСОВАНО -->
+    {% if success or booking.status == "CANCELLED" %}
+      <div class="w-14 h-14 bg-zinc-900 border border-zinc-800 text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-inner">
+        ✕
+      </div>
+
+      <h1 class="text-xl font-bold text-white mb-2" x-text="t('cancelled_title')"></h1>
       <p class="text-xs text-zinc-400 mb-6 leading-relaxed">
-        Online zrušení je možné nejpozději <b>24 hodin předem</b>. Pro zrušení nebo změnu termínu prosím kontaktujte kadeřnici telefonicky:
+        <span x-text="t('cancelled_desc_1')"></span>
+        <b class="text-zinc-200">{{ booking.date|date:"d.m.Y" }} <span x-text="lang === 'uk' ? 'о' : 'v'"></span> {{ booking.start_time|time:"H:i" }}</b>
+        <span x-text="t('cancelled_desc_2')"></span>
       </p>
 
-      <a href="tel:+420777000000" class="inline-block w-full py-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs rounded-xl transition mb-4">
-        📞 Zavolat do studia
+      <a href="/" class="inline-flex items-center justify-center w-full py-3.5 px-4 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl border border-zinc-700/60 transition" x-text="t('new_booking_btn')">
       </a>
 
-      <a href="/" class="text-xs text-zinc-500 hover:text-zinc-300">
-        Zpět na hlavní stránku
-      </a>
+    <!-- 2. СТАН: ЗАПІЗНІЛЕ СКАСУВАННЯ (< 24 ГОДИН) -->
+    {% elif too_late %}
+      <div class="w-14 h-14 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">
+        ⏳
+      </div>
 
+      <h1 class="text-xl font-bold text-white mb-2" x-text="t('too_late_title')"></h1>
+      <p class="text-xs text-zinc-400 mb-6 leading-relaxed" x-text="t('too_late_desc')"></p>
+
+      <!-- Деталі запису -->
+      <div class="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl p-4 text-left mb-6 space-y-2 text-xs">
+        <div class="flex justify-between">
+          <span class="text-zinc-500" x-text="t('service_label')"></span>
+          <span class="text-white font-medium">
+            <span x-show="lang === 'uk'">{{ booking.service.name_uk|default:booking.service.name_cs }}</span>
+            <span x-show="lang === 'cs'">{{ booking.service.name_cs|default:booking.service.name_uk }}</span>
+          </span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-zinc-500" x-text="t('time_label')"></span>
+          <span class="text-amber-400 font-semibold">{{ booking.date|date:"d.m.Y" }} <span x-text="lang === 'uk' ? 'о' : 'v'"></span> {{ booking.start_time|time:"H:i" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-zinc-500" x-text="t('client_label')"></span>
+          <span class="text-white">{{ booking.client_name }}</span>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <a href="tel:+420777000000" class="inline-flex items-center justify-center gap-2 w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs rounded-xl transition shadow-lg shadow-amber-500/10">
+          <span>📞</span> <span x-text="t('call_studio')"></span> (+420 606 495 625)
+        </a>
+        <a href="/" class="block text-xs text-zinc-500 hover:text-zinc-300 transition py-1" x-text="t('back_home')">
+        </a>
+      </div>
+
+    <!-- 3. СТАН: ЗАВЧАСНЕ ПІДТВЕРДЖЕННЯ СКАСУВАННЯ (> 24 ГОДИН) -->
     {% else %}
-      <!-- Звичайне підтвердження скасування за добу -->
-      <h1 class="text-lg font-bold text-white mb-1">Zrušit rezervaci?</h1>
-      <!-- форма скасування -->
+      <div class="w-14 h-14 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">
+        🗑️
+      </div>
+
+      <h1 class="text-xl font-bold text-white mb-2" x-text="t('confirm_cancel_title')"></h1>
+      <p class="text-xs text-zinc-400 mb-6" x-text="t('confirm_cancel_desc')"></p>
+
+      <!-- Деталі візиту -->
+      <div class="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl p-4 text-left mb-6 space-y-2.5 text-xs">
+        <div class="flex justify-between">
+          <span class="text-zinc-500" x-text="t('service_label')"></span>
+          <span class="text-white font-medium">
+            <span x-show="lang === 'uk'">{{ booking.service.name_uk|default:booking.service.name_cs }}</span>
+            <span x-show="lang === 'cs'">{{ booking.service.name_cs|default:booking.service.name_uk }}</span>
+          </span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-zinc-500" x-text="t('time_label')"></span>
+          <span class="text-amber-400 font-semibold">{{ booking.date|date:"d.m.Y" }} <span x-text="lang === 'uk' ? 'о' : 'v'"></span> {{ booking.start_time|time:"H:i" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-zinc-500" x-text="t('price_label')"></span>
+          <span class="text-white font-bold">{{ booking.service.price }} Kč</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-zinc-500" x-text="t('client_label')"></span>
+          <span class="text-white">{{ booking.client_name }}</span>
+        </div>
+      </div>
+
+      <!-- Форма підтвердження скасування -->
+      <form method="POST" class="space-y-3">
+        {% csrf_token %}
+        <button type="submit" class="w-full py-3.5 px-4 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-rose-600/20" x-text="t('yes_cancel_btn')">
+        </button>
+        <a href="/" class="inline-block w-full py-3.5 px-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-medium text-xs rounded-xl border border-zinc-800 transition" x-text="t('keep_booking_btn')">
+        </a>
+      </form>
     {% endif %}
+
+  </div>
+
+  <script>
+    function cancelApp() {
+      return {
+        // За замовчуванням мова чеська (якщо в URL не передано ?lang=uk)
+        lang: new URLSearchParams(window.location.search).get('lang') || 'cs',
+
+        dict: {
+          uk: {
+            address_val: "Rokycanská 1385/130, Plzeň 4 (у ТЦ)",
+            service_label: "Послуга:",
+            time_label: "Час візиту:",
+            price_label: "Вартість:",
+            client_label: "Клієнт:",
+            cancelled_title: "Запис скасовано",
+            cancelled_desc_1: "Ваш візит на ",
+            cancelled_desc_2: " було скасовано. Часовий слот звільнено для інших клієнтів.",
+            new_booking_btn: "← Зробити новий запис",
+            too_late_title: "Неможливо скасувати онлайн",
+            too_late_desc: "Онлайн-скасування можливе не пізніше ніж за 24 години до початку. Для зміни або скасування терміну, будь ласка, зателефонуйте майстрині:",
+            call_studio: "Зателефонувати в студію",
+            back_home: "Повернутися на головну сторінку",
+            confirm_cancel_title: "Дійсно скасувати запис?",
+            confirm_cancel_desc: "Якщо ви підтвердите скасування, цей термін буде негайно запропоновано іншим клієнтам.",
+            yes_cancel_btn: "Так, скасувати запис",
+            keep_booking_btn: "Залишити запис без змін"
+          },
+          cs: {
+            address_val: "Rokycanská 1385/130, Plzeň (OC)",
+            service_label: "Služba:",
+            time_label: "Termín:",
+            price_label: "Cena:",
+            client_label: "Klient:",
+            cancelled_title: "Rezervace byla zrušena",
+            cancelled_desc_1: "Váš termín na ",
+            cancelled_desc_2: " byl uvolněn pro ostatní klienty.",
+            new_booking_btn: "← Vytvořit novou rezervaci",
+            too_late_title: "Termín nelze zrušit online",
+            too_late_desc: "Online zrušení je možné nejpozději 24 hodin před začátkem. Pro úpravu nebo zrušení termínu prosím kontaktujte kadeřnici telefonicky:",
+            call_studio: "Zavolat do studia",
+            back_home: "Zpět na hlavní stránku",
+            confirm_cancel_title: "Opravdu zrušit rezervaci?",
+            confirm_cancel_desc: "Pokud termín zrušíte, bude okamžitě nabídnut dalším zájemcům.",
+            yes_cancel_btn: "Ano, zrušit termín",
+            keep_booking_btn: "Ponechat rezervaci"
+          }
+        },
+
+        t(key) {
+          return this.dict[this.lang][key] || key;
+        }
+      };
+    }
+  </script>
+</body>
+</html>

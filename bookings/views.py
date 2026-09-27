@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
@@ -24,10 +24,12 @@ class ServiceListView(generics.ListAPIView):
 
 
 class AvailableSlotsView(APIView):
-    """Генерація вільних віконець із 15-хвилинним кроком,
+    """Динамічна генерація слотів:
 
-    урахуванням графіка майстрині (WorkingDay), буферного часу та захистом від
-    «мертвих вікон» (розривів графіка від 10 до 30 хв).
+    - На вільні проміжки дня пропонуються рівні години (10:00, 11:00, 12:00...).
+    - Після існуючого запису слот генерується рівно встик (тривалість + 10 хв
+    буфер, наприклад 10:50).
+    - Блокуються проміжки від 10 до 29 хвилин (мертві вікна).
     """
 
     authentication_classes = []
@@ -55,7 +57,6 @@ class AvailableSlotsView(APIView):
         if booking_date < timezone.localdate():
             return Response({"slots": []})
 
-        # 1. Перевірка робочого графіка майстрині з БД
         try:
             working_day = WorkingDay.objects.get(date=booking_date)
             if working_day.is_day_off:
@@ -63,31 +64,32 @@ class AvailableSlotsView(APIView):
         except WorkingDay.DoesNotExist:
             return Response({"slots": []})
 
-        # 2. Отримання всіх активних записів на цей день
+        tz = timezone.get_current_timezone()
+        day_start_dt = timezone.make_aware(
+            datetime.combine(booking_date, working_day.start_time), tz
+        )
+        day_end_dt = timezone.make_aware(
+            datetime.combine(booking_date, working_day.end_time), tz
+        )
+        now = timezone.localtime()
+
         confirmed_bookings = (
-            Booking.objects.filter(
-                date=booking_date,
-            )
+            Booking.objects.filter(date=booking_date)
             .exclude(status=Booking.Status.CANCELLED)
             .select_related("service")
-            .only(
-                "start_time",
-                "end_time",
-                "service__duration_minutes",
-                "service__buffer_minutes",
-            )
             .order_by("start_time")
         )
 
-        tz = timezone.get_current_timezone()
-
-        # Формуємо зайняті проміжки з урахуванням буферного часу
         busy_intervals = []
         for b in confirmed_bookings:
             b_start = timezone.make_aware(
                 datetime.combine(booking_date, b.start_time), tz
             )
-            b_buffer = b.service.buffer_minutes if b.service else 10
+            b_buffer = (
+                b.service.buffer_minutes
+                if (b.service and b.service.buffer_minutes is not None)
+                else 10
+            )
 
             if b.end_time:
                 b_end_clean = timezone.make_aware(
@@ -101,79 +103,90 @@ class AvailableSlotsView(APIView):
                 )
                 b_end_clean = b_start + timedelta(minutes=dur)
 
-            b_end_with_buffer = b_end_clean + timedelta(minutes=b_buffer)
-            busy_intervals.append((b_start, b_end_with_buffer))
+            busy_intervals.append((b_start, b_end_clean + timedelta(minutes=b_buffer)))
 
-        # 3. Генерація слотів
-        slots = []
-        current_dt = timezone.make_aware(
-            datetime.combine(booking_date, working_day.start_time), tz
-        )
-        end_work_dt = timezone.make_aware(
-            datetime.combine(booking_date, working_day.end_time), tz
-        )
-        now = timezone.localtime()
+        merged_busy = []
+        for interval in sorted(busy_intervals, key=lambda x: x[0]):
+            if not merged_busy:
+                merged_busy.append(interval)
+            else:
+                last_start, last_end = merged_busy[-1]
+                if interval[0] <= last_end:
+                    merged_busy[-1] = (last_start, max(last_end, interval[1]))
+                else:
+                    merged_busy.append(interval)
 
-        service_duration = timedelta(minutes=service.duration_minutes)
-        service_buffer = timedelta(minutes=service.buffer_minutes)
-        min_viable_gap = 30  # Мінімальна послуга з буфером (дитяча 20 хв + 10 хв буфер)
+        free_windows = []
+        cursor = day_start_dt
 
-        while current_dt < end_work_dt:
-            candidate_start = current_dt
-            candidate_service_end = candidate_start + service_duration
-            candidate_busy_end = candidate_start + service_duration + service_buffer
+        for b_start, b_end in merged_busy:
+            if b_start > cursor:
+                free_windows.append((cursor, min(b_start, day_end_dt)))
+            cursor = max(cursor, b_end)
 
-            # Чи вміщується послуга до кінця зміни
-            if candidate_service_end <= end_work_dt:
-                # Перевірка на майбутній час для сьогоднішнього дня
-                is_future = True
-                if booking_date == timezone.localdate() and candidate_start <= (
+        if cursor < day_end_dt:
+            free_windows.append((cursor, day_end_dt))
+
+        service_dur = timedelta(minutes=service.duration_minutes)
+        service_buf = timedelta(minutes=service.buffer_minutes)
+        service_total = service_dur + service_buf
+        min_viable_gap = 30
+
+        slots = set()
+
+        for w_start, w_end in free_windows:
+            window_duration_mins = (w_end - w_start).total_seconds() / 60
+            service_total_mins = service_total.total_seconds() / 60
+
+            if w_end == day_end_dt:
+                if w_start + service_dur > day_end_dt:
+                    continue
+            else:
+                if w_start + service_total > w_end:
+                    continue
+
+            candidates = [w_start]
+
+            curr_hour = w_start.hour
+            if w_start.minute > 0:
+                curr_hour += 1
+
+            while curr_hour <= w_end.hour:
+                cand_hour_dt = timezone.make_aware(
+                    datetime.combine(booking_date, time(curr_hour, 0)), tz
+                )
+                if w_start < cand_hour_dt < w_end:
+                    candidates.append(cand_hour_dt)
+                curr_hour += 1
+
+            for cand in candidates:
+                if booking_date == timezone.localdate() and cand <= (
                     now + timedelta(minutes=15)
                 ):
-                    is_future = False
+                    continue
 
-                # Перевірка 1: Перетин із зайнятими слотами
-                has_conflict = False
-                for b_start, b_end in busy_intervals:
-                    if candidate_start < b_end and b_start < candidate_busy_end:
-                        has_conflict = True
-                        break
+                if w_end == day_end_dt:
+                    if cand + service_dur > day_end_dt:
+                        continue
+                else:
+                    if cand + service_total > w_end:
+                        continue
 
-                if is_future and not has_conflict:
-                    # Перевірка 2: Захист від «мертвого вікна» ДО цього слота
-                    prev_busy_end = None
-                    for b_start, b_end in busy_intervals:
-                        if b_end <= candidate_start:
-                            if prev_busy_end is None or b_end > prev_busy_end:
-                                prev_busy_end = b_end
+                gap_before = (cand - w_start).total_seconds() / 60
+                if 0 < gap_before < min_viable_gap:
+                    continue
 
-                    is_gap_safe = True
-                    if prev_busy_end:
-                        gap_before = (
-                            candidate_start - prev_busy_end
-                        ).total_seconds() / 60
-                        # Якщо проміжок не стиковий (>10 хв) і менший за мінімальну послугу (<30 хв)
-                        if 10 < gap_before < min_viable_gap:
-                            is_gap_safe = False
+                if w_end != day_end_dt:
+                    cand_busy_end = cand + service_total
+                    gap_after = (w_end - cand_busy_end).total_seconds() / 60
+                    if 0 < gap_after < min_viable_gap:
+                        can_fit_another = window_duration_mins >= (
+                            service_total_mins + min_viable_gap
+                        )
+                        if can_fit_another or cand != w_start:
+                            continue
 
-                    # Перевірка 3: Захист від «мертвого вікна» ПІСЛЯ цього слота
-                    next_busy_start = None
-                    for b_start, b_end in busy_intervals:
-                        if b_start >= candidate_busy_end:
-                            if next_busy_start is None or b_start < next_busy_start:
-                                next_busy_start = b_start
-
-                    if next_busy_start:
-                        gap_after = (
-                            next_busy_start - candidate_busy_end
-                        ).total_seconds() / 60
-                        if 10 < gap_after < min_viable_gap:
-                            is_gap_safe = False
-
-                    if is_gap_safe:
-                        slots.append(candidate_start.time().strftime("%H:%M"))
-
-            current_dt += timedelta(minutes=15)
+                slots.add(cand.time().strftime("%H:%M"))
 
         return Response(
             {
@@ -181,7 +194,7 @@ class AvailableSlotsView(APIView):
                 "service_id": service.id,
                 "service_duration": service.duration_minutes,
                 "buffer_minutes": service.buffer_minutes,
-                "slots": slots,
+                "slots": sorted(list(slots)),
             }
         )
 
