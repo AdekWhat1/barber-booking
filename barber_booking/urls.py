@@ -18,8 +18,12 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
+from bookings.views import BookingPageView, BookingLightPageView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("", BookingPageView.as_view(), name="booking-page"),
+    path("light/", BookingLightPageView.as_view(), name="booking-light"),  # Світла тема
     path("api/", include("bookings.urls", namespace="bookings")),
     path(
         "api/notifications/", include("notifications.urls", namespace="notifications")
