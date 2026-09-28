@@ -1,3 +1,4 @@
+import html
 from datetime import date, datetime, time, timedelta
 import logging
 import requests
@@ -350,10 +351,7 @@ def get_day_manager_keyboard(target_date: date) -> dict:
 
 
 def get_start_hours_keyboard(target_date: date) -> dict:
-    """Вибір початку зміни: з 09:00 до 13:00 (крок 30 хв).
-
-    Рівно 9 кнопок — ідеальна сітка 3х3.
-    """
+    """Вибір початку зміни: з 09:00 до 13:00 (крок 30 хв)."""
     d_str = target_date.isoformat()
 
     start_options = [
@@ -383,17 +381,12 @@ def get_start_hours_keyboard(target_date: date) -> dict:
 
 
 def get_end_hours_keyboard(target_date: date, start_time_str: str) -> dict:
-    """Вибір завершення зміни: з 13:30 до 22:00 (крок 30 хв).
-
-    Рівно 18 кнопок — ідеальна сітка 6х3.
-    """
+    """Вибір завершення зміни: з 13:30 до 22:00 (крок 30 хв)."""
     d_str = target_date.isoformat()
     start_dt = datetime.strptime(start_time_str, "%H:%M")
 
-    # Якщо вам знадобиться дозвіл завершувати зміну рівно о 13:00 (наприклад, 09:00 - 13:00),
-    # просто розкоментуйте рядок "13:00" нижче (тоді кнопок стане 19).
     end_options = [
-        # "13:00",
+        "13:00",
         "13:30",
         "14:00",
         "14:30",
@@ -625,16 +618,20 @@ def get_day_schedule_text(target_date: date) -> str:
 
 
 def send_booking_notification(booking):
-    chat_id = getattr(settings, "TELEGRAM_BARBER_CHAT_ID", None)
-    if not chat_id:
+    raw_chat_ids = str(getattr(settings, "TELEGRAM_BARBER_CHAT_ID", "") or "")
+    chat_ids = [cid.strip() for cid in raw_chat_ids.split(",") if cid.strip()]
+    if not chat_ids:
         return False
+
     service_name = (
         booking.service.name_uk if booking.service.name_uk else booking.service.name_cs
     )
+    safe_client_name = html.escape(booking.client_name)
+    safe_phone = html.escape(booking.client_phone)
     message_text = (
         "✂️ <b>Новий запис!</b>\n\n"
-        f"👤 <b>Клієнт:</b> {booking.client_name}\n"
-        f"📞 <b>Телефон:</b> <a href='tel:{booking.client_phone}'>{booking.client_phone}</a>\n"
+        f"👤 <b>Клієнт:</b> {safe_client_name}\n"
+        f"📞 <b>Телефон:</b> <a href='tel:{safe_phone}'>{safe_phone}</a>\n"
         f"💇‍♀️ <b>Послуга:</b> {service_name} ({booking.service.duration_minutes} хв)\n"
         f"💰 <b>Вартість:</b> {booking.service.price} Kč\n"
         f"📅 <b>Дата:</b> {booking.date.strftime('%d.%m.%Y')}\n"
@@ -650,25 +647,41 @@ def send_booking_notification(booking):
             ]
         ]
     }
-    return send_telegram_message(
-        chat_id=chat_id, text=message_text, reply_markup=cancel_markup
-    )
+
+    success = True
+    for cid in chat_ids:
+        res = send_telegram_message(
+            chat_id=cid, text=message_text, reply_markup=cancel_markup
+        )
+        if not res:
+            success = False
+    return success
 
 
 def send_cancellation_notification(booking):
-    chat_id = getattr(settings, "TELEGRAM_BARBER_CHAT_ID", None)
-    if not chat_id:
+    raw_chat_ids = str(getattr(settings, "TELEGRAM_BARBER_CHAT_ID", "") or "")
+    chat_ids = [cid.strip() for cid in raw_chat_ids.split(",") if cid.strip()]
+    if not chat_ids:
         return False
+
     service_name = (
         booking.service.name_uk if booking.service.name_uk else booking.service.name_cs
     )
+    safe_client_name = html.escape(booking.client_name)
+    safe_phone = html.escape(booking.client_phone)
     message_text = (
         "❌ <b>Клієнт скасував запис!</b>\n\n"
-        f"👤 <b>Клієнт:</b> {booking.client_name}\n"
-        f"📞 <b>Телефон:</b> {booking.client_phone}\n"
+        f"👤 <b>Клієнт:</b> {safe_client_name}\n"
+        f"📞 <b>Телефон:</b> {safe_phone}\n"
         f"💇‍♀️ <b>Послуга:</b> {service_name}\n"
         f"📅 <b>Дата:</b> {booking.date.strftime('%d.%m.%Y')}\n"
         f"⏰ <b>Було призначено на:</b> {booking.start_time.strftime('%H:%M')}\n\n"
         "<i>Цей час знову доступний на сайті для інших людей.</i>"
     )
-    return send_telegram_message(chat_id=chat_id, text=message_text)
+
+    success = True
+    for cid in chat_ids:
+        res = send_telegram_message(chat_id=cid, text=message_text)
+        if not res:
+            success = False
+    return success

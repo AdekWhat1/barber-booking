@@ -60,7 +60,10 @@ class Booking(models.Model):
         CANCELLED = "cancelled", "Скасовано"
 
     cancel_token = models.UUIDField(
-        default=uuid.uuid4, editable=False, unique=True, verbose_name="Токен скасування"
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        verbose_name="Токен скасування",
     )
     service = models.ForeignKey(
         Service,
@@ -87,6 +90,13 @@ class Booking(models.Model):
         verbose_name = "Запис"
         verbose_name_plural = "Записи"
         ordering = ["-date", "-start_time"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["date", "start_time"],
+                condition=~models.Q(status="cancelled"),
+                name="unique_active_booking_slot",
+            )
+        ]
 
     def __str__(self):
         return f"{self.date} {self.start_time.strftime('%H:%M')} — {self.client_name} ({self.service.name_cs})"

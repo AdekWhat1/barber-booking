@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta, time
 
+from django.db import IntegrityError, transaction
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 from rest_framework import generics, status
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
@@ -33,6 +35,8 @@ class AvailableSlotsView(APIView):
     """
 
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "slots_check"
 
     def get(self, request):
         lang = request.query_params.get("lang", "cs")
@@ -200,53 +204,86 @@ class AvailableSlotsView(APIView):
 
 
 class BookingCreateView(generics.CreateAPIView):
+    """Створення бронювання з атомарним захистом від Race Conditions (подвійних записів)."""
+
     serializer_class = BookingCreateSerializer
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "booking_create"
 
-    def perform_create(self, serializer):
-        booking = serializer.save()
-        send_booking_notification(booking)
+    def create(self, request, *args, **kwargs):
+        lang = request.query_params.get("lang", "cs")
+        date_str = request.data.get("date")
+
+        try:
+            with transaction.atomic():
+                if date_str:
+                    WorkingDay.objects.select_for_update().filter(date=date_str).first()
+
+                serializer = self.get_serializer(data=request.data)
+                serializer.is_valid(raise_exception=True)
+                booking = serializer.save()
+
+                transaction.on_commit(lambda: send_booking_notification(booking))
+
+        except IntegrityError:
+            return Response(
+                {"error": get_msg("slot_already_taken", lang)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+        )
 
 
 class BookingCancelView(APIView):
-    """
-    Скасування запису за унікальним токеном.
-    POST /api/cancel/<uuid:cancel_token>/
-    """
+    """Безпечне скасування запису за унікальним токеном (ідемпотентне)."""
+
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "cancel_attempt"
 
     def post(self, request, cancel_token):
         lang = request.query_params.get("lang", "cs")
 
-        try:
-            booking = Booking.objects.get(cancel_token=cancel_token)
-        except Booking.DoesNotExist:
-            return Response(
-                {"error": get_msg("booking_not_found", lang)},
-                status=status.HTTP_404_NOT_FOUND,
+        with transaction.atomic():
+            booking = (
+                Booking.objects.select_for_update()
+                .filter(cancel_token=cancel_token)
+                .first()
             )
 
-        if booking.status == Booking.Status.CANCELLED:
-            return Response(
-                {"detail": get_msg("already_cancelled", lang)},
-                status=status.HTTP_400_BAD_REQUEST,
+            if not booking:
+                return Response(
+                    {"error": get_msg("booking_not_found", lang)},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if booking.status == Booking.Status.CANCELLED:
+                return Response(
+                    {"detail": get_msg("already_cancelled", lang)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            booking_datetime = timezone.make_aware(
+                datetime.combine(booking.date, booking.start_time)
             )
+            if booking_datetime - timezone.now() < timedelta(hours=24):
+                return Response(
+                    {"error": get_msg("cancel_too_late", lang)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        booking_datetime = timezone.make_aware(
-            datetime.combine(booking.date, booking.start_time)
-        )
-        if booking_datetime - timezone.now() < timedelta(hours=24):
-            return Response(
-                {"error": get_msg("cancel_too_late", lang)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            booking.status = Booking.Status.CANCELLED
+            booking.save(update_fields=["status"])
 
-        booking.status = Booking.Status.CANCELLED
-        booking.save(update_fields=["status"])
-
-        send_cancellation_notification(booking)
+            transaction.on_commit(lambda: send_cancellation_notification(booking))
 
         return Response(
-            {"detail": get_msg("cancel_success", lang)}, status=status.HTTP_200_OK
+            {"detail": get_msg("cancel_success", lang)},
+            status=status.HTTP_200_OK,
         )
 
 

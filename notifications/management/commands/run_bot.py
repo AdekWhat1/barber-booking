@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-import re
+import html
 import time
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -24,22 +24,22 @@ from notifications.services import (
     send_telegram_message,
 )
 
-# Токен-запрошення для миттєвої авторизації майстрині
-SECRET_INVITE_TOKEN = "barber2026"
+SECRET_INVITE_TOKEN = getattr(settings, "TELEGRAM_INVITE_TOKEN", None)
 
-# Множина ID авторизованих користувачів (ви + майстриня)
 ALLOWED_CHAT_IDS = set()
 
-# Стан очікування ручного вводу годин
-USER_STATES = {}
+
+def is_user_authorized(chat_id: str | int) -> bool:
+    """Перевіряє наявність Chat ID у списку дозволених."""
+    return str(chat_id).strip() in ALLOWED_CHAT_IDS
 
 
 class Command(BaseCommand):
-    help = "Telegram бот: розклад, керування днями, авто-доступ та ручний ввід"
+    help = "Telegram бот: розклад, керування днями через кнопки та авто-доступ"
 
     def handle(self, *args, **options):
         token = getattr(settings, "TELEGRAM_BOT_TOKEN", None)
-        admin_chat_id = str(getattr(settings, "TELEGRAM_BARBER_CHAT_ID", ""))
+        admin_chat_ids_raw = str(getattr(settings, "TELEGRAM_BARBER_CHAT_ID", "") or "")
 
         if not token:
             self.stderr.write(
@@ -47,13 +47,16 @@ class Command(BaseCommand):
             )
             return
 
-        # Додаємо ваш ID одразу, щоб у вас доступ був завжди
-        if admin_chat_id:
-            ALLOWED_CHAT_IDS.add(admin_chat_id)
+        for cid in admin_chat_ids_raw.split(","):
+            cid_clean = cid.strip()
+            if cid_clean:
+                ALLOWED_CHAT_IDS.add(cid_clean)
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"🤖 Telegram-бот запущено! Очікую авторизації (токен: {SECRET_INVITE_TOKEN})..."
+                f"🤖 Telegram-бот запущено!\n"
+                f"Авторизовані Chat ID: {list(ALLOWED_CHAT_IDS) or 'немає'}\n"
+                f"Інвайт-токен: {SECRET_INVITE_TOKEN}"
             )
         )
 
@@ -71,21 +74,20 @@ class Command(BaseCommand):
                 for update in res.get("result", []):
                     offset = update["update_id"] + 1
 
-                    # 1. ОБРОБКА ПОВІДОМЛЕНЬ
+                    # 1. ОБРОБКА ТЕКСТОВИХ ПОВІДОМЛЕНЬ ТА МЕНЮ
                     if "message" in update:
                         msg = update["message"]
                         chat_id = str(msg.get("chat", {}).get("id"))
                         text = (msg.get("text") or "").strip()
 
-                        # Активація доступу через посилання або пароль
-                        if (
+                        if SECRET_INVITE_TOKEN and (
                             text == f"/start {SECRET_INVITE_TOKEN}"
                             or text == SECRET_INVITE_TOKEN
                         ):
                             ALLOWED_CHAT_IDS.add(chat_id)
                             self.stdout.write(
                                 self.style.SUCCESS(
-                                    f"🎉 Майстриня авторизована! Chat ID: {chat_id}"
+                                    f"🎉 Авторизація успішна! Chat ID: {chat_id}"
                                 )
                             )
                             send_telegram_message(
@@ -94,17 +96,17 @@ class Command(BaseCommand):
                                     "✅ <b>Доступ активовано!</b>\n\n"
                                     "Вітаю в робочому кабінеті. Тут ви можете"
                                     " переглядати записи, скасовувати їх та"
-                                    " виставляти свій робочий графік:"
+                                    " виставляти графік кнопками:"
                                 ),
                                 reply_markup=get_admin_keyboard(),
                             )
                             continue
 
-                        # Якщо користувач не авторизований
-                        if chat_id not in ALLOWED_CHAT_IDS:
+                        # Перевірка прав доступу
+                        if not is_user_authorized(chat_id):
                             self.stdout.write(
                                 self.style.WARNING(
-                                    f"⚠️ Спроба доступу від невідомого ID: {chat_id}"
+                                    f"⚠️ Спроба неавторизованого доступу від ID: {chat_id}"
                                 )
                             )
                             send_telegram_message(
@@ -113,80 +115,6 @@ class Command(BaseCommand):
                             )
                             continue
 
-                        # Ручний ввід годин (якщо бот очікує)
-                        if (
-                            chat_id in USER_STATES
-                            and USER_STATES[chat_id]["action"] == "WAITING_MANUAL_HOURS"
-                        ):
-                            target_d = USER_STATES[chat_id]["date"]
-
-                            if text.lower() in [
-                                "відміна",
-                                "скасувати",
-                                "/cancel",
-                            ]:
-                                del USER_STATES[chat_id]
-                                send_telegram_message(
-                                    chat_id,
-                                    "Ввід скасовано.",
-                                    reply_markup=get_admin_keyboard(),
-                                )
-                                continue
-
-                            times_found = re.findall(
-                                r"\b([0-2]?[0-9]:[0-5][0-9])\b", text
-                            )
-                            if len(times_found) >= 2:
-                                s_raw, e_raw = times_found[0], times_found[1]
-                                try:
-                                    s_time = datetime.strptime(
-                                        s_raw,
-                                        "%H:%M" if len(s_raw) == 5 else "%I:%M",
-                                    ).time()
-                                    e_time = datetime.strptime(
-                                        e_raw,
-                                        "%H:%M" if len(e_raw) == 5 else "%I:%M",
-                                    ).time()
-
-                                    if s_time >= e_time:
-                                        send_telegram_message(
-                                            chat_id,
-                                            "⚠️ Час початку не може бути пізнішим за час завершення. Спробуйте ще раз:",
-                                        )
-                                        continue
-
-                                    WorkingDay.objects.update_or_create(
-                                        date=target_d,
-                                        defaults={
-                                            "start_time": s_time,
-                                            "end_time": e_time,
-                                            "is_day_off": False,
-                                        },
-                                    )
-                                    del USER_STATES[chat_id]
-
-                                    confirm_text = (
-                                        f"✅ <b>Графік збережено!</b>\n\n"
-                                        f"📅 Дата: <b>{target_d.strftime('%d.%m.%Y')}</b>\n"
-                                        f"🕒 Години: <code>{s_time.strftime('%H:%M')} – {e_time.strftime('%H:%M')}</code>\n\n"
-                                        f"<i>Слоти на сайті миттєво оновлені.</i>"
-                                    )
-                                    send_telegram_message(
-                                        chat_id,
-                                        confirm_text,
-                                        reply_markup=get_admin_keyboard(),
-                                    )
-                                    continue
-                                except ValueError:
-                                    pass
-
-                            send_telegram_message(
-                                chat_id,
-                                "⚠️ Формат не розпізнано. Введіть години, наприклад: <code>10:30 - 18:30</code>",
-                            )
-                            continue
-
-                        # Стандартні кнопки меню
                         today = timezone.localdate()
 
                         if text in ["/start", "Меню"]:
@@ -246,39 +174,11 @@ class Command(BaseCommand):
                         chat_id = str(msg.get("chat", {}).get("id"))
                         message_id = msg.get("message_id")
 
-                        if chat_id not in ALLOWED_CHAT_IDS:
+                        if not is_user_authorized(chat_id):
                             answer_callback_query(cb_id, text="Доступ заборонено.")
                             continue
 
-                        # Ручний ввід
-                        if data.startswith("manualhours_"):
-                            date_str = data.replace("manualhours_", "")
-                            target_d = datetime.strptime(date_str, "%Y-%m-%d").date()
-                            USER_STATES[chat_id] = {
-                                "action": "WAITING_MANUAL_HOURS",
-                                "date": target_d,
-                            }
-                            cancel_kb = {
-                                "inline_keyboard": [
-                                    [
-                                        {
-                                            "text": "« Скасувати ввід",
-                                            "callback_data": f"schedday_{date_str}",
-                                        }
-                                    ]
-                                ]
-                            }
-                            send_telegram_message(
-                                chat_id,
-                                f"✍️ <b>Введіть години роботи на {target_d.strftime('%d.%m.%Y')}:</b>\n\n"
-                                f"Напишіть повідомлення, наприклад:\n"
-                                f"<code>10:30 - 18:30</code> або <code>10:30 19:00</code>",
-                                reply_markup=cancel_kb,
-                            )
-                            answer_callback_query(cb_id)
-
-                        # Навігація по записах
-                        elif data.startswith("week_"):
+                        if data.startswith("week_"):
                             week_val = data.replace("week_", "")
                             start_d = (
                                 timezone.localdate()
@@ -362,8 +262,6 @@ class Command(BaseCommand):
 
                         elif data.startswith("schedday_"):
                             date_str = data.replace("schedday_", "")
-                            if chat_id in USER_STATES:
-                                del USER_STATES[chat_id]
                             try:
                                 target_d = datetime.strptime(
                                     date_str, "%Y-%m-%d"
@@ -377,7 +275,6 @@ class Command(BaseCommand):
                             except ValueError:
                                 answer_callback_query(cb_id, text="Помилка дати")
 
-                        # Конструктор годин
                         elif data.startswith("pickstart_"):
                             date_str = data.replace("pickstart_", "")
                             target_d = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -466,31 +363,33 @@ class Command(BaseCommand):
                                 chat_id, message_id, text, reply_markup=kb
                             )
 
-                        # Скасування клієнтів майстринею
                         elif data.startswith("master_cancel_"):
                             booking_id = data.replace("master_cancel_", "")
                             try:
                                 b = Booking.objects.select_related("service").get(
                                     id=booking_id
                                 )
+
+                                safe_name = html.escape(b.client_name)
+                                safe_phone = html.escape(b.client_phone)
+                                safe_service = (
+                                    html.escape(b.service.name_uk or b.service.name_cs)
+                                    if b.service
+                                    else ""
+                                )
+
                                 confirm_kb = {
                                     "inline_keyboard": [
                                         [
                                             {
-                                                "text": (
-                                                    "⚠️ Підтвердити" " скасування"
-                                                ),
-                                                "callback_data": (
-                                                    "confirm_cancel_" f"{booking_id}"
-                                                ),
+                                                "text": "⚠️ Підтвердити скасування",
+                                                "callback_data": f"confirm_cancel_{booking_id}",
                                             }
                                         ],
                                         [
                                             {
                                                 "text": "« Повернутися",
-                                                "callback_data": (
-                                                    f"day_{b.date.isoformat()}"
-                                                ),
+                                                "callback_data": f"day_{b.date.isoformat()}",
                                             }
                                         ],
                                     ]
@@ -499,9 +398,9 @@ class Command(BaseCommand):
                                     chat_id,
                                     message_id,
                                     f"❓ <b>Скасувати запис клієнта?</b>\n\n"
-                                    f"👤 <b>{b.client_name}</b> ({b.client_phone})\n"
+                                    f"👤 <b>{safe_name}</b> ({safe_phone})\n"
                                     f"📅 {b.date.strftime('%d.%m.%Y')} о {b.start_time.strftime('%H:%M')}\n"
-                                    f"✂️ {b.service.name_uk if b.service else ''}\n\n"
+                                    f"✂️ {safe_service}\n\n"
                                     "<i>Слот миттєво звільниться на сайті для інших людей.</i>",
                                     reply_markup=confirm_kb,
                                 )
