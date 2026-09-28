@@ -263,21 +263,37 @@
 		</div>
 
 		<!-- Блок керування записом для клієнта -->
-		<div class="pt-4 border-t border-zinc-800 space-y-3">
+		<div class="pt-5 border-t border-zinc-800 text-left space-y-3">
+			<!-- Підказка: навіщо це посилання і куди його зберігати -->
+			<div class="p-3.5 bg-zinc-900/80 border border-zinc-800 rounded-2xl flex items-start gap-2.5">
+				<span class="text-base leading-none">💡</span>
+				<div class="text-xs">
+					<div class="font-semibold text-zinc-200 mb-0.5" x-text="t('cancel_hint_title')"></div>
+					<div class="text-zinc-400 leading-relaxed text-[11px]" x-text="t('cancel_hint_desc')"></div>
+				</div>
+			</div>
+
+			<!-- Кнопка копіювання з анімацією успіху -->
 			<button
+					type="button"
 					@click="copyCancelLink()"
-					class="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-xl transition flex items-center justify-center gap-2"
+					:class="copiedLink ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-transparent'"
+					class="w-full py-3 border text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2"
 			>
-				<span>🔗</span>
+				<span x-text="copiedLink ? '✓' : '🔗'"></span>
 				<span x-text="copiedLink ? t('link_copied') : t('copy_cancel_link')"></span>
 			</button>
 
-			<button
-					@click="cancelBookingDirectly()"
-					:disabled="isCancelling"
-					class="text-xs text-rose-400 hover:text-rose-300 transition underline underline-offset-4"
-					x-text="isCancelling ? t('cancelling') : t('cancel_booking_btn')"
-			></button>
+			<!-- Скасування у випадку помилки прямо зараз -->
+			<div class="text-center pt-1">
+				<button
+						type="button"
+						@click="cancelBookingDirectly()"
+						:disabled="isCancelling"
+						class="text-[11px] text-zinc-500 hover:text-rose-400 transition underline underline-offset-4"
+						x-text="isCancelling ? t('cancelling') : t('cancel_booking_btn')"
+				></button>
+			</div>
 		</div>
 	</section>
 </main>
@@ -335,10 +351,11 @@
                     client: "Клієнт:",
                     date_time: "Дата та час:",
                     new_booking: "Зробити ще один запис",
-                    cancel_hint: "Якщо плани зміняться, збережіть посилання для скасування:",
+                    cancel_hint_title: "Збережіть посилання на скасування",
+                    cancel_hint_desc: "Якщо ваші плани зміняться, за цим посиланням ви зможете самостійно скасувати візит (не пізніше ніж за 24 години до початку).",
                     copy_cancel_link: "Скопіювати посилання для скасування",
-                    link_copied: "Посилання скопійовано!",
-                    cancel_booking_btn: "Скасувати цей запис",
+                    link_copied: "✓ Посилання скопійовано в буфер!",
+                    cancel_booking_btn: "Скасувати зараз (якщо помилилися при записі)",
                     cancelling: "Скасовуємо...",
                     confirm_cancel_msg: "Ви впевнені, що хочете скасувати цей запис?",
                     cancel_success_msg: "Запис успішно скасовано.",
@@ -371,10 +388,11 @@
                     client: "Klient:",
                     date_time: "Datum a čas:",
                     new_booking: "Vytvořit další rezervaci",
-                    cancel_hint: "Pokud se vaše plány změní, uložte si odkaz pro zrušení:",
+                    cancel_hint_title: "Uložte si odkaz pro zrušení",
+                    cancel_hint_desc: "Pokud se vaše plány změní, pomocí tohoto odkazu můžete rezervaci sami zrušit (nejpozději 24 hodin před začátkem).",
                     copy_cancel_link: "Zkopírovat odkaz pro zrušení",
-                    link_copied: "Odkaz byl zkopírován!",
-                    cancel_booking_btn: "Zrušit tuto rezervaci",
+                    link_copied: "✓ Odkaz byl zkopírován do schránky!",
+                    cancel_booking_btn: "Zrušit ihned (pokud jste se spletli)",
                     cancelling: "Ruším...",
                     confirm_cancel_msg: "Opravdu chcete tuto rezervaci zrušit?",
                     cancel_success_msg: "Rezervace byla úspěšně zrušena.",
