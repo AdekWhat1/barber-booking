@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -82,10 +83,18 @@ WSGI_APPLICATION = "barber_booking.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
+if not DB_PASSWORD and not DEBUG:
+    raise ImproperlyConfigured("Variable POSTGRES_PASSWORD is required for execution")
+
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("POSTGRES_DB", "barber_db"),
+        "USER": os.environ.get("POSTGRES_USER", "barber_user"),
+        "PASSWORD": DB_PASSWORD,
+        "HOST": os.environ.get("DB_HOST", "localhost"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
     }
 }
 
@@ -168,3 +177,6 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
 
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
