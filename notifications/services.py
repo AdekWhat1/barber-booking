@@ -351,7 +351,7 @@ def get_day_manager_keyboard(target_date: date) -> dict:
 
 
 def get_start_hours_keyboard(target_date: date) -> dict:
-    """Вибір початку зміни: з 09:00 до 13:00 (крок 30 хв)."""
+    """Вибір початку зміни: з 09:00 до 18:00 (крок 30 хв)."""
     d_str = target_date.isoformat()
 
     start_options = [
@@ -364,6 +364,16 @@ def get_start_hours_keyboard(target_date: date) -> dict:
         "12:00",
         "12:30",
         "13:00",
+        "13:30",
+        "14:00",
+        "14:30",
+        "15:00",
+        "15:30",
+        "16:00",
+        "16:30",
+        "17:00",
+        "17:30",
+        "18:00",
     ]
 
     keyboard = []
