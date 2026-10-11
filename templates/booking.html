@@ -154,14 +154,13 @@
     </div>
 
     <!-- Повідомлення про відсутність слотів -->
-    <div x-show="!loadingSlots && slots.length === 0" class="text-center py-7 px-4">
+    <div x-show="!loadingSlots && slots.length === 0" class="text-center py-8 px-4">
      <div class="w-12 h-12 mx-auto mb-3 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xl shadow-inner">
       <span x-show="emptyReason === 'not_scheduled'">🗓️</span>
       <span x-show="emptyReason === 'day_off'">☕</span>
       <span x-show="emptyReason === 'fully_booked' || !['not_scheduled', 'day_off'].includes(emptyReason)">⏳</span>
      </div>
      <p class="font-medium text-zinc-200 text-sm" x-text="getEmptyTitle()"></p>
-     <p class="text-xs text-zinc-500 mt-1 max-w-xs mx-auto leading-relaxed" x-text="getEmptyDesc()"></p>
     </div>
 
     <div x-show="!loadingSlots && slots.length > 0" class="grid grid-cols-4 gap-2">
@@ -368,9 +367,7 @@
 
                     // Статуси доступності слотів
                     not_scheduled_title: "Запис на цей день ще не відкрито",
-                    not_scheduled_desc: "Якщо вам потрібна саме ця дата — зв'яжіться з майстром напряму.",
                     day_off_title: "Вихідний день",
-                    day_off_desc: "У цей день майстриня відпочиває. Будь ласка, оберіть іншу дату.",
                     fully_booked_title: "Усі віконця вже зайняті",
                     fully_booked_desc: "На цей день вільних слотів немає. Спробуйте обрати іншу дату.",
 
@@ -416,9 +413,7 @@
 
                     // Статуси доступності слотів
                     not_scheduled_title: "Rezervace na tento den ještě není otevřena",
-                    not_scheduled_desc: "Pokud potřebujete právě tento termín, kontaktujte prosím přímo barbera.",
                     day_off_title: "Den volna",
-                    day_off_desc: "V tento den máme zavřeno. Vyberte prosím jiné datum.",
                     fully_booked_title: "Všechny termíny jsou obsazené",
                     fully_booked_desc: "Pro tento den již nejsou žádné volné termíny. Zkuste prosím jiné datum.",
 
@@ -507,12 +502,6 @@
                 if (this.emptyReason === 'not_scheduled') return this.t('not_scheduled_title');
                 if (this.emptyReason === 'day_off') return this.t('day_off_title');
                 return this.t('fully_booked_title');
-            },
-
-            getEmptyDesc() {
-                if (this.emptyReason === 'not_scheduled') return this.t('not_scheduled_desc');
-                if (this.emptyReason === 'day_off') return this.t('day_off_desc');
-                return this.t('fully_booked_desc');
             },
 
             async fetchSlots() {
