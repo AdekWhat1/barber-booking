@@ -59,14 +59,15 @@ class AvailableSlotsView(APIView):
             )
 
         if booking_date < timezone.localdate():
-            return Response({"slots": []})
+            return Response({"slots": [], "reason": "past"})
 
         try:
             working_day = WorkingDay.objects.get(date=booking_date)
             if working_day.is_day_off:
-                return Response({"slots": []})
+                return Response({"slots": [], "reason": "day_off"})
         except WorkingDay.DoesNotExist:
-            return Response({"slots": []})
+            # Зміна ще не створена майстринею
+            return Response({"slots": [], "reason": "not_scheduled"})
 
         tz = timezone.get_current_timezone()
         day_start_dt = timezone.make_aware(
@@ -192,13 +193,15 @@ class AvailableSlotsView(APIView):
 
                 slots.add(cand.time().strftime("%H:%M"))
 
+        slots_list = sorted(list(slots))
         return Response(
             {
                 "date": date_str,
                 "service_id": service.id,
                 "service_duration": service.duration_minutes,
                 "buffer_minutes": service.buffer_minutes,
-                "slots": sorted(list(slots)),
+                "slots": slots_list,
+                "reason": "fully_booked" if not slots_list else None,
             }
         )
 
